@@ -15,6 +15,8 @@ import {
   Upload,
   X,
   Image as ImageIcon,
+  Star,
+  MessageSquareHeart,
 } from 'lucide-react';
 import {
   collection,
@@ -32,7 +34,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useCart } from '@/lib/cart-context';
 import { useToast } from '@/lib/toast-context';
 
-// 🔥 Compress + return base64 (gaya ng add flower)
+// 🔥 Compress + return base64
 async function compressToBase64(
   file: File,
   maxWidth = 800,
@@ -54,7 +56,6 @@ async function compressToBase64(
         canvas.height = height;
         const ctx = canvas.getContext('2d')!;
         ctx.drawImage(img, 0, 0, width, height);
-        // Output as JPEG base64
         const base64 = canvas.toDataURL('image/jpeg', quality);
         resolve(base64);
       };
@@ -63,6 +64,35 @@ async function compressToBase64(
     };
     reader.onerror = reject;
   });
+}
+
+// 🔥 Simple sentiment detection base sa rating + keywords
+function detectSentiment(rating: number, comment: string): string {
+  const text = comment.toLowerCase();
+  const positiveWords = [
+    'maganda', 'ganda', 'salamat', 'thank', 'love', 'nice', 'beautiful',
+    'excellent', 'perfect', 'great', 'amazing', 'fresh', 'masaya', 'happy',
+    'sulit', 'worth', 'recommend', 'best',
+  ];
+  const negativeWords = [
+    'pangit', 'lanta', 'withered', 'bad', 'terrible', 'awful', 'late',
+    'delay', 'sira', 'damage', 'worst', 'disappointed', 'masama', 'refund',
+  ];
+
+  let score = 0;
+  positiveWords.forEach((w) => {
+    if (text.includes(w)) score += 1;
+  });
+  negativeWords.forEach((w) => {
+    if (text.includes(w)) score -= 1;
+  });
+
+  if (rating >= 4) score += 1;
+  if (rating <= 2) score -= 1;
+
+  if (score > 0) return 'positive';
+  if (score < 0) return 'negative';
+  return 'neutral';
 }
 
 export default function CheckoutPage() {
@@ -86,6 +116,13 @@ export default function CheckoutPage() {
   // Base64 data URL for receipt
   const [receiptDataUrl, setReceiptDataUrl] = useState<string>('');
   const [receiptName, setReceiptName] = useState<string>('');
+
+  // ⭐ Review / Sentiment state
+  const [reviewRating, setReviewRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -164,7 +201,6 @@ export default function CheckoutPage() {
     setLoading(true);
 
     try {
-      // Build order (base64 image embedded directly)
       const orderData = {
         userId: user.uid,
         customerName: form.name,
@@ -194,7 +230,6 @@ export default function CheckoutPage() {
 
       const docRef = await addDoc(collection(db, 'orders'), orderData);
 
-      // Fire-and-forget promo increment
       if (appliedPromo) {
         const promoCode = appliedPromo.code;
         (async () => {
@@ -243,6 +278,82 @@ export default function CheckoutPage() {
     }
   };
 
+  // ⭐ Submit Review → save to `testimonials` collection (matches admin page)
+  const handleSubmitReview = async () => {
+    if (!user) return;
+
+    if (reviewRating === 0) {
+      showToast({
+        message: 'Please select a star rating.',
+        type: 'error',
+      });
+      return;
+    }
+
+    setSubmittingReview(true);
+    try {
+      const sentiment = detectSentiment(reviewRating, reviewComment);
+
+      // Build avatar initials (e.g., "Juan Dela Cruz" → "JD")
+      const displayName =
+        form.name || userData?.name || user.email?.split('@')[0] || 'Customer';
+      const initials = displayName
+        .split(' ')
+        .filter(Boolean)
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase();
+
+      // Extract location from address (2nd to the last part — usually city)
+      const addressParts = (form.address || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const location =
+        addressParts.length >= 2
+          ? addressParts[addressParts.length - 2]
+          : addressParts[0] || 'Philippines';
+
+      await addDoc(collection(db, 'testimonials'), {
+        userId: user.uid,
+        name: displayName,
+        location: location,
+        rating: reviewRating,
+        text: reviewComment.trim(),
+        avatar: initials,
+        approved: false, // admin must approve before showing on homepage
+        // extra info (optional — admin page ignores unknown fields)
+        orderId,
+        email: user.email || null,
+        sentiment,
+        createdAt: new Date().toISOString(),
+      });
+
+      setReviewSubmitted(true);
+
+      showToast({
+        message: '💐 Thank you for your feedback!',
+        description:
+          sentiment === 'positive'
+            ? "We're so happy you loved it!"
+            : sentiment === 'negative'
+            ? "Sorry about that — we'll do better next time."
+            : 'We appreciate your review! It will appear once approved.',
+        type: 'success',
+      });
+    } catch (err: any) {
+      console.error('Review failed:', err);
+      showToast({
+        message: 'Failed to submit review.',
+        description: err.message || 'Something went wrong.',
+        type: 'error',
+      });
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="flex min-h-screen flex-col bg-[#FDFBF7]">
@@ -257,11 +368,16 @@ export default function CheckoutPage() {
   if (!user) return null;
 
   if (submitted) {
+    const sentimentPreview =
+      reviewRating > 0
+        ? detectSentiment(reviewRating, reviewComment)
+        : null;
+
     return (
       <div className="flex min-h-screen flex-col bg-[#FDFBF7] font-sans text-gray-800">
         <Navbar />
         <main className="flex flex-1 items-center justify-center px-4 py-24">
-          <div className="w-full max-w-md border border-gray-200 bg-white p-10 text-center shadow-sm">
+          <div className="w-full max-w-lg border border-gray-200 bg-white p-8 text-center shadow-sm md:p-10">
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full border border-gray-200">
               <CheckCircle className="h-8 w-8 text-emerald-600" strokeWidth={1.5} />
             </div>
@@ -282,6 +398,129 @@ export default function CheckoutPage() {
                 #{orderId.slice(0, 8).toUpperCase()}
               </p>
             </div>
+
+            {/* ⭐⭐ REVIEW / SENTIMENT SECTION ⭐⭐ */}
+            {!reviewSubmitted ? (
+              <div className="mb-8 border-t border-gray-100 pt-8 text-left">
+                <div className="mb-5 text-center">
+                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-pink-100 bg-pink-50">
+                    <MessageSquareHeart
+                      className="h-5 w-5 text-pink-500"
+                      strokeWidth={1.5}
+                    />
+                  </div>
+                  <h2 className="font-serif text-xl text-gray-900">
+                    How was your experience?
+                  </h2>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Your feedback helps us improve our blooms 💐
+                  </p>
+                </div>
+
+                {/* Star Rating */}
+                <div className="mb-5 flex justify-center gap-1.5">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setReviewRating(star)}
+                      onMouseEnter={() => setHoverRating(star)}
+                      onMouseLeave={() => setHoverRating(0)}
+                      className="transition-transform hover:scale-110"
+                      aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                    >
+                      <Star
+                        className={`h-8 w-8 transition-colors ${
+                          star <= (hoverRating || reviewRating)
+                            ? 'fill-amber-400 text-amber-400'
+                            : 'text-gray-300'
+                        }`}
+                        strokeWidth={1.5}
+                      />
+                    </button>
+                  ))}
+                </div>
+
+                {reviewRating > 0 && (
+                  <p className="mb-4 text-center text-xs font-medium uppercase tracking-widest text-gray-500">
+                    {reviewRating === 5 && 'Excellent! 🌟'}
+                    {reviewRating === 4 && 'Very Good 😊'}
+                    {reviewRating === 3 && 'Good 🙂'}
+                    {reviewRating === 2 && 'Fair 😕'}
+                    {reviewRating === 1 && 'Poor 😞'}
+                  </p>
+                )}
+
+                {/* Comment */}
+                <textarea
+                  rows={3}
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  className="mb-4 w-full border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition-colors focus:border-gray-900 placeholder:text-gray-400"
+                  placeholder="Tell us about your experience (optional)..."
+                />
+
+                {/* Live sentiment preview */}
+                {sentimentPreview && (
+                  <p className="mb-4 text-center text-xs text-gray-400">
+                    Detected mood:{' '}
+                    <span
+                      className={
+                        sentimentPreview === 'positive'
+                          ? 'font-medium text-emerald-600'
+                          : sentimentPreview === 'negative'
+                          ? 'font-medium text-rose-500'
+                          : 'font-medium text-gray-500'
+                      }
+                    >
+                      {sentimentPreview}
+                    </span>
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSubmitReview}
+                  disabled={submittingReview || reviewRating === 0}
+                  className="flex w-full items-center justify-center gap-2 bg-gray-900 px-6 py-3.5 text-xs font-medium uppercase tracking-widest text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+                >
+                  {submittingReview ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      Submit Review
+                      <Star className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setReviewSubmitted(true)}
+                  className="mt-3 w-full text-center text-xs uppercase tracking-widest text-gray-400 transition-colors hover:text-gray-600"
+                >
+                  Skip for now
+                </button>
+              </div>
+            ) : (
+              <div className="mb-8 border-t border-gray-100 pt-8">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-pink-100 bg-pink-50">
+                  <MessageSquareHeart
+                    className="h-6 w-6 text-pink-500"
+                    strokeWidth={1.5}
+                  />
+                </div>
+                <p className="text-sm font-medium text-gray-900">
+                  Thank you for your feedback!
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Your review means the world to us 🌸
+                </p>
+              </div>
+            )}
 
             <div className="flex flex-col gap-3">
               <Link
