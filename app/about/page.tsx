@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { Navbar } from '@/components/Navbar';
 import { Flower2 } from 'lucide-react';
 
-// Flower data to replace the "Team" section as requested
 const flowerShowcase = [
   {
     name: 'Romantic Roses',
@@ -51,7 +50,6 @@ export default function AboutPage() {
       <main className="flex-1">
         {/* PAGE HEADER */}
         <section className="relative flex flex-col items-center justify-center py-16 md:py-24">
-          {/* Decorative floral line art (simulated with an icon) */}
           <div className="mb-4 text-pink-300">
             <Flower2 className="h-8 w-8" strokeWidth={1} />
           </div>
@@ -63,14 +61,14 @@ export default function AboutPage() {
           </p>
         </section>
 
-        {/* SECTION 1: Image Left, Text Right */}
+        {/* SECTION 1 */}
         <section className="container mx-auto px-4 py-12 md:px-8 md:py-16">
           <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-20">
             <div className="order-2 lg:order-1">
               <img
                 src="https://images.unsplash.com/photo-1563241527-3004b7be0ff9?w=800&q=80"
                 alt="Florist holding a bouquet"
-                className="aspect-[4/5] w-full rounded-sm object-cover shadow-sm"
+                className="aspect-4/5 w-full rounded-sm object-cover shadow-sm"
               />
             </div>
             <div className="order-1 lg:order-2">
@@ -89,7 +87,7 @@ export default function AboutPage() {
           </div>
         </section>
 
-        {/* SECTION 2: Text Left, Image Right */}
+        {/* SECTION 2 */}
         <section className="container mx-auto px-4 py-12 md:px-8 md:py-16">
           <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-20">
             <div className="order-1 lg:order-1">
@@ -109,13 +107,13 @@ export default function AboutPage() {
               <img
                 src="https://images.unsplash.com/photo-1596438459194-f275f413d6ff?w=800&q=80"
                 alt="Florist arranging flowers"
-                className="aspect-[4/5] w-full rounded-sm object-cover shadow-sm"
+                className="aspect-4/5 w-full rounded-sm object-cover shadow-sm"
               />
             </div>
           </div>
         </section>
 
-        {/* SECTION 3: Our Team / Flower Showcase */}
+        {/* SECTION 3 */}
         <section className="container mx-auto px-4 py-20 md:px-8 md:py-24">
           <div className="mb-16 text-center">
             <h2 className="mb-4 font-serif text-3xl text-gray-900 md:text-4xl">
@@ -148,12 +146,10 @@ export default function AboutPage() {
         </section>
       </main>
 
-      {/* FOOTER - Matching the Mockup exactly */}
+      {/* FOOTER */}
       <footer className="bg-[#F4F4F4] pt-16 pb-8">
         <div className="container mx-auto px-4 md:px-8">
           <div className="grid grid-cols-1 gap-12 md:grid-cols-3">
-            
-            {/* Column 1: Customer Service */}
             <div>
               <h3 className="mb-6 text-sm font-semibold text-gray-900">
                 Customer Service
@@ -172,7 +168,6 @@ export default function AboutPage() {
               </ul>
             </div>
 
-            {/* Column 2: Company */}
             <div>
               <h3 className="mb-6 text-sm font-semibold text-gray-900">
                 Company
@@ -191,7 +186,6 @@ export default function AboutPage() {
               </ul>
             </div>
 
-            {/* Column 3: Social Media */}
             <div>
               <h3 className="mb-6 text-sm font-semibold text-gray-900">
                 Social Media
@@ -211,7 +205,6 @@ export default function AboutPage() {
             </div>
           </div>
 
-          {/* Copyright */}
           <div className="mt-16 border-t border-gray-200 pt-8 text-center">
             <p className="text-xs text-gray-400">
               Copyright © 2026. All rights reserved. Powered by Flowery.

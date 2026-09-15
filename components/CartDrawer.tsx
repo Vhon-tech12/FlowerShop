@@ -26,7 +26,6 @@ export function CartDrawer() {
   const shipping = subtotal > 0 ? 150 : 0;
   const total = Math.max(subtotal - discountAmount + shipping, 0);
 
-  // Lock body scroll when drawer is open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -38,7 +37,6 @@ export function CartDrawer() {
     };
   }, [isOpen]);
 
-  // Close on ESC
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeDrawer();
@@ -62,7 +60,7 @@ export function CartDrawer() {
       {/* BACKDROP */}
       <div
         onClick={closeDrawer}
-        className={`fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${
+        className={`fixed inset-0 z-60 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${
           isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
         aria-hidden="true"
@@ -70,7 +68,7 @@ export function CartDrawer() {
 
       {/* DRAWER */}
       <aside
-        className={`fixed right-0 top-0 z-[70] flex h-full w-full max-w-md flex-col bg-white shadow-2xl transition-transform duration-300 ease-out ${
+        className={`fixed right-0 top-0 z-70 flex h-full w-full max-w-md flex-col bg-white shadow-2xl transition-transform duration-300 ease-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
         aria-label="Shopping cart"
@@ -120,7 +118,6 @@ export function CartDrawer() {
             <div className="flex-1 overflow-y-auto px-6 py-6">
               <ul className="space-y-6">
                 {cart.map((item, index) => (
-                  // ✅ COMPOSITE KEY: fallback to index if flowerId is missing/duplicate
                   <li
                     key={`${item.flowerId ?? 'item'}-${index}`}
                     className="flex gap-4"

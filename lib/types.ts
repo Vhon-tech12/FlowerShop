@@ -13,8 +13,8 @@ export interface CartItem {
   flowerName: string;
   price: number;
   imageUrl: string;
-  quantity: number;
   stock: number;
+  quantity: number;
 }
 
 export interface OrderItem {

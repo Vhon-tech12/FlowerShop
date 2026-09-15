@@ -10,7 +10,6 @@ import { Flower } from '@/lib/types';
 import { useCart } from '@/lib/cart-context';
 import { useCartDrawer } from '@/lib/cart-drawer-context';
 
-// Footer data
 const footerLinks = {
   customerService: [
     { label: 'Help & Contact Us', href: '/contact' },
@@ -73,9 +72,8 @@ export default function FlowersPage() {
     return matchSearch && matchCategory;
   });
 
-  // 🔥 NEW: Handle Add to Cart + Open Drawer
   const handleAddToCart = (flower: Flower, e: React.MouseEvent) => {
-    e.preventDefault(); // wag mag-navigate sa product page
+    e.preventDefault();
     e.stopPropagation();
     addToCart(flower);
     openDrawer();
@@ -86,7 +84,6 @@ export default function FlowersPage() {
       <Navbar />
 
       <main className="flex-1">
-        {/* PAGE HEADER */}
         <section className="relative flex flex-col items-center justify-center py-16 md:py-24">
           <div className="mb-4 text-pink-300">
             <Flower2 className="h-8 w-8" strokeWidth={1} />
@@ -99,7 +96,6 @@ export default function FlowersPage() {
           </p>
         </section>
 
-        {/* FILTERS & SEARCH */}
         <section className="container mx-auto px-4 md:px-8">
           <div className="mb-12 flex flex-col items-center justify-between gap-6 border-b border-gray-200 pb-6 md:flex-row">
             <div className="flex flex-wrap justify-center gap-6 md:justify-start">
@@ -130,7 +126,6 @@ export default function FlowersPage() {
             </div>
           </div>
 
-          {/* RESULTS */}
           {loading ? (
             <div className="flex h-64 items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
@@ -138,15 +133,14 @@ export default function FlowersPage() {
           ) : (
             <>
               {filtered.length > 0 ? (
-                <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 md:gap-x-6 lg:gap-x-8">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-10 md:grid-cols-3 md:gap-x-6 lg:grid-cols-4 lg:gap-x-8">
                   {filtered.map((flower) => (
                     <Link
                       key={flower.id}
                       href={`/flowers/${flower.id}`}
                       className="group flex flex-col"
                     >
-                      {/* IMAGE with Hover Add-to-Cart */}
-                      <div className="relative mb-4 aspect-[4/5] w-full overflow-hidden bg-gray-50">
+                      <div className="relative mb-4 aspect-4/5 w-full overflow-hidden bg-gray-50">
                         <img
                           src={flower.imageUrl}
                           alt={flower.name}
@@ -154,20 +148,21 @@ export default function FlowersPage() {
                           loading="lazy"
                         />
 
-                        {/* ADD TO CART — slides up on hover */}
                         <div className="absolute inset-x-0 bottom-0 translate-y-full opacity-0 transition-all duration-300 ease-out group-hover:translate-y-0 group-hover:opacity-100">
                           <button
                             onClick={(e) => handleAddToCart(flower, e)}
                             disabled={flower.stock === 0}
                             className="flex w-full items-center justify-center gap-2 bg-gray-900/95 px-4 py-3.5 text-[10px] font-medium uppercase tracking-widest text-white backdrop-blur-sm transition-colors hover:bg-gray-900 disabled:cursor-not-allowed disabled:bg-gray-400"
                           >
-                            <ShoppingBag className="h-3.5 w-3.5" strokeWidth={1.5} />
+                            <ShoppingBag
+                              className="h-3.5 w-3.5"
+                              strokeWidth={1.5}
+                            />
                             {flower.stock === 0 ? 'Sold Out' : 'Add to Cart'}
                           </button>
                         </div>
                       </div>
 
-                      {/* TEXT INFO */}
                       <div className="flex items-start justify-between">
                         <h3 className="font-serif text-base text-gray-900 transition-colors group-hover:text-pink-600 sm:text-lg">
                           {flower.name}
@@ -203,7 +198,6 @@ export default function FlowersPage() {
         </section>
       </main>
 
-      {/* FOOTER */}
       <footer className="mt-24 bg-[#F4F4F4] pt-16 pb-8">
         <div className="container mx-auto px-4 md:px-8">
           <div className="grid grid-cols-1 gap-12 md:grid-cols-3">
@@ -226,7 +220,9 @@ export default function FlowersPage() {
             </div>
 
             <div>
-              <h3 className="mb-6 text-sm font-semibold text-gray-900">Company</h3>
+              <h3 className="mb-6 text-sm font-semibold text-gray-900">
+                Company
+              </h3>
               <ul className="space-y-3">
                 {footerLinks.company.map((link) => (
                   <li key={link.label}>

@@ -45,7 +45,6 @@ export default function FlowerDetailPage() {
           const flowerData = { id: docSnap.id, ...docSnap.data() } as Flower;
           setFlower(flowerData);
 
-          // Fetch related (same category)
           const allSnap = await getDocs(collection(db, 'flowers'));
           const all = allSnap.docs.map((d) => ({
             id: d.id,
@@ -70,10 +69,8 @@ export default function FlowerDetailPage() {
   const handleAddToCart = () => {
     if (!flower) return;
 
-    // ✅ FIXED: Pass the whole Flower object
     addToCart(flower, quantity);
 
-    // 🎉 Toast
     showToast({
       message: 'Added to cart',
       description: `${quantity}x ${flower.name} • ₱${(
@@ -82,14 +79,12 @@ export default function FlowerDetailPage() {
       type: 'success',
     });
 
-    // 🛒 Auto-open the slide-in cart drawer
     openDrawer();
 
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
   };
 
-  // ============ LOADING ============
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col bg-[#FDFBF7]">
@@ -101,7 +96,6 @@ export default function FlowerDetailPage() {
     );
   }
 
-  // ============ NOT FOUND ============
   if (!flower) {
     return (
       <div className="flex min-h-screen flex-col bg-[#FDFBF7] font-sans text-gray-800">
@@ -136,8 +130,6 @@ export default function FlowerDetailPage() {
 
       <main className="flex-1">
         <div className="container mx-auto px-4 py-12 md:px-8 md:py-16">
-          
-          {/* BACK LINK */}
           <Link
             href="/flowers"
             className="mb-12 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-gray-400 transition-colors hover:text-gray-900"
@@ -147,10 +139,9 @@ export default function FlowerDetailPage() {
           </Link>
 
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-20">
-            
             {/* IMAGE */}
             <div className="relative">
-              <div className="relative aspect-[4/5] w-full overflow-hidden bg-gray-50">
+              <div className="relative aspect-4/5 w-full overflow-hidden bg-gray-50">
                 <img
                   src={flower.imageUrl}
                   alt={flower.name}
@@ -164,23 +155,18 @@ export default function FlowerDetailPage() {
 
             {/* DETAILS */}
             <div className="flex flex-col lg:py-6">
-              
-              {/* Name */}
               <h1 className="mb-4 font-serif text-4xl text-gray-900 md:text-5xl">
                 {flower.name}
               </h1>
 
-              {/* Price */}
               <p className="mb-8 font-serif text-2xl text-gray-900 md:text-3xl">
                 ₱{flower.price.toLocaleString()}
               </p>
 
-              {/* Description */}
               <p className="mb-10 text-sm leading-relaxed text-gray-600 md:text-base">
                 {flower.description}
               </p>
 
-              {/* Stock Status */}
               <div className="mb-8 flex items-center gap-3 text-xs uppercase tracking-widest">
                 <span
                   className={`flex h-1.5 w-1.5 rounded-full ${
@@ -194,7 +180,6 @@ export default function FlowerDetailPage() {
                 </span>
               </div>
 
-              {/* Quantity */}
               <div className="mb-8">
                 <label className="mb-3 block text-xs font-medium uppercase tracking-widest text-gray-500">
                   Quantity
@@ -224,7 +209,6 @@ export default function FlowerDetailPage() {
                 </div>
               </div>
 
-              {/* Total */}
               <div className="mb-8 flex items-baseline justify-between border-t border-b border-gray-100 py-5">
                 <span className="text-xs font-medium uppercase tracking-widest text-gray-500">
                   Total
@@ -234,7 +218,6 @@ export default function FlowerDetailPage() {
                 </span>
               </div>
 
-              {/* Add to Cart */}
               <button
                 onClick={handleAddToCart}
                 disabled={isOutOfStock}
@@ -254,10 +237,12 @@ export default function FlowerDetailPage() {
                 )}
               </button>
 
-              {/* Features */}
               <div className="grid grid-cols-3 gap-6 border-t border-gray-100 pt-8">
                 <div className="flex flex-col items-center text-center">
-                  <Truck className="mb-3 h-5 w-5 text-gray-400" strokeWidth={1.5} />
+                  <Truck
+                    className="mb-3 h-5 w-5 text-gray-400"
+                    strokeWidth={1.5}
+                  />
                   <span className="text-[10px] font-medium uppercase tracking-widest text-gray-500">
                     Same-day Delivery
                   </span>
@@ -284,7 +269,6 @@ export default function FlowerDetailPage() {
             </div>
           </div>
 
-          {/* RELATED PRODUCTS */}
           {related.length > 0 && (
             <section className="mt-28">
               <div className="mb-12 text-center">
@@ -303,7 +287,7 @@ export default function FlowerDetailPage() {
                     href={`/flowers/${f.id}`}
                     className="group flex flex-col"
                   >
-                    <div className="relative mb-4 aspect-[4/5] w-full overflow-hidden bg-gray-50">
+                    <div className="relative mb-4 aspect-4/5 w-full overflow-hidden bg-gray-50">
                       <img
                         src={f.imageUrl}
                         alt={f.name}
@@ -326,7 +310,6 @@ export default function FlowerDetailPage() {
         </div>
       </main>
 
-      {/* FOOTER */}
       <footer className="mt-24 border-t border-gray-100 bg-[#F4F4F4]">
         <div className="container mx-auto px-4 py-8 text-center md:px-8">
           <p className="text-xs uppercase tracking-widest text-gray-400">

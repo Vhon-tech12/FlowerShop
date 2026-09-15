@@ -48,7 +48,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
 
-  // Load from localStorage on mount
   useEffect(() => {
     try {
       const savedCart = localStorage.getItem(CART_STORAGE_KEY);
@@ -62,7 +61,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Persist to localStorage
   useEffect(() => {
     if (!isHydrated) return;
     try {
@@ -85,7 +83,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [appliedPromo, isHydrated]);
 
-  // ✅ FIXED: Add to cart with quantity merging
   const addToCart = (flower: Flower, quantity = 1) => {
     if (!flower?.id) {
       console.warn('addToCart: flower has no id', flower);
@@ -97,7 +94,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
         (item) => item.flowerId === flower.id
       );
 
-      // ✅ Kung existing na — i-update lang ang quantity
       if (existingIndex !== -1) {
         const updated = [...prev];
         const existing = updated[existingIndex];
@@ -111,7 +107,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
         return updated;
       }
 
-      // ✅ Kung bago — idagdag sa cart
       return [
         ...prev,
         {

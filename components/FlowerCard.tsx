@@ -19,13 +19,7 @@ export function FlowerCard({ flower }: FlowerCardProps) {
     e.preventDefault();
     e.stopPropagation();
 
-    addToCart({
-      flowerId: flower.id,
-      flowerName: flower.name,
-      price: flower.price,
-      imageUrl: flower.imageUrl,
-      stock: flower.stock,
-    });
+    addToCart(flower);   // ✅ I-pasa ang buong flower
 
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);

@@ -14,9 +14,6 @@ import {
   Mail,
   Phone,
   MapPin,
-  Search,
-  User,
-  ShoppingBag,
   ArrowUpRight,
 } from 'lucide-react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
@@ -54,7 +51,6 @@ export default function HomePage() {
   const [testimonialsLoading, setTestimonialsLoading] = useState(true);
   const [avgRating, setAvgRating] = useState(0);
 
-  // Fetch flowers
   useEffect(() => {
     async function fetchFlowers() {
       try {
@@ -63,7 +59,7 @@ export default function HomePage() {
           id: doc.id,
           ...doc.data(),
         })) as Flower[];
-        setFlowers(data.slice(0, 3)); // Limit to 3 for the tilted hero design
+        setFlowers(data.slice(0, 3));
       } catch (err) {
         console.error('Error fetching flowers:', err);
       } finally {
@@ -73,7 +69,6 @@ export default function HomePage() {
     fetchFlowers();
   }, []);
 
-  // Fetch testimonials (approved only)
   useEffect(() => {
     async function fetchTestimonials() {
       try {
@@ -130,12 +125,18 @@ export default function HomePage() {
         {/* HERO & POPULAR PRODUCTS SECTION */}
         <section className="relative overflow-hidden pt-12 pb-24 md:pt-20">
           {/* Grid Background overlay */}
-          <div className="absolute inset-0 z-0 [background-image:linear-gradient(to_right,#0000000a_1px,transparent_1px),linear-gradient(to_bottom,#0000000a_1px,transparent_1px)] [background-size:32px_32px]"></div>
-          
+          <div
+            className="absolute inset-0 z-0 bg-size-[32px_32px]"
+            style={{
+              backgroundImage:
+                'linear-gradient(to right, #0000000a 1px, transparent 1px), linear-gradient(to bottom, #0000000a 1px, transparent 1px)',
+            }}
+          />
+
           <div className="container relative z-10 mx-auto px-4">
             <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2">
               
-              {/* LEFT COLUMN: Text & Stacked Cards */}
+              {/* LEFT COLUMN */}
               <div className="flex flex-col justify-center">
                 <h1 className="mb-6 text-5xl font-bold leading-[1.1] tracking-tight md:text-7xl">
                   The Purest <br />
@@ -144,7 +145,7 @@ export default function HomePage() {
                     People You Love.
                   </span>
                 </h1>
-                
+
                 <p className="mb-8 max-w-md text-lg text-gray-600">
                   From birthdays to weddings, we deliver the freshest blooms right to your doorstep. Order online today!
                 </p>
@@ -168,10 +169,12 @@ export default function HomePage() {
                 {/* Popular Products (Stacked Cards) */}
                 <div className="relative">
                   <div className="mb-6 flex items-center gap-2">
-                    <h2 className="text-2xl font-bold italic">Popular <span className="font-normal">Products</span></h2>
+                    <h2 className="text-2xl font-bold italic">
+                      Popular <span className="font-normal">Products</span>
+                    </h2>
                     <ArrowRight className="h-5 w-5 text-gray-400" />
                   </div>
-                  
+
                   {loading ? (
                     <div className="flex h-48 items-center justify-center">
                       <Loader2 className="h-8 w-8 animate-spin text-pink-600" />
@@ -181,12 +184,12 @@ export default function HomePage() {
                   ) : (
                     <div className="flex items-end -space-x-8 px-4">
                       {flowers.map((flower, i) => (
-                        <div 
-                          key={flower.id} 
+                        <div
+                          key={flower.id}
                           className={`relative w-40 transition-transform duration-300 hover:z-50 hover:-translate-y-4 hover:scale-105 md:w-48
-                            ${i === 0 ? 'z-10 rotate-[-6deg] translate-y-4' : ''}
-                            ${i === 1 ? 'z-20 rotate-[0deg]' : ''}
-                            ${i === 2 ? 'z-30 rotate-[6deg] translate-y-2' : ''}
+                            ${i === 0 ? 'z-10 -rotate-6 translate-y-4' : ''}
+                            ${i === 1 ? 'z-20 rotate-0' : ''}
+                            ${i === 2 ? 'z-30 rotate-6 translate-y-2' : ''}
                           `}
                         >
                           <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-xl">
@@ -199,11 +202,11 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* RIGHT COLUMN: Hero Image & Floating Elements */}
+              {/* RIGHT COLUMN */}
               <div className="relative mx-auto w-full max-w-md lg:max-w-none">
-                <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[2rem] bg-pink-50">
+                <div className="relative aspect-4/5 w-full overflow-hidden rounded-[2rem] bg-pink-50">
                   {/* Decorative Badge */}
-                  <div className="absolute left-[-20px] top-12 z-20 flex h-28 w-28 animate-[spin_10s_linear_infinite] items-center justify-center rounded-full bg-pink-600 p-2 text-center text-[10px] font-bold uppercase tracking-widest text-white shadow-xl">
+                  <div className="absolute -left-5 top-12 z-20 flex h-28 w-28 animate-[spin_10s_linear_infinite] items-center justify-center rounded-full bg-pink-600 p-2 text-center text-[10px] font-bold uppercase tracking-widest text-white shadow-xl">
                     <div className="flex h-full w-full items-center justify-center rounded-full border border-pink-400 border-dashed">
                       Flowery • Flowery • Flowery •
                     </div>
@@ -217,23 +220,24 @@ export default function HomePage() {
                 </div>
 
                 {/* Floating Stat Cards */}
-                <div className="absolute bottom-16 left-[-30px] z-20 flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-2xl">
+                <div className="absolute bottom-16 -left-7.5 z-20 flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-2xl">
                   <div>
                     <p className="text-2xl font-bold">3.2K+</p>
                     <p className="text-xs text-gray-500">Customers</p>
                   </div>
                   <div className="h-10 w-px bg-gray-200"></div>
                   <div className="text-center">
-                    <p className="text-2xl font-bold">4.8 <span className="text-yellow-400">★</span></p>
+                    <p className="text-2xl font-bold">
+                      4.8 <span className="text-yellow-400">★</span>
+                    </p>
                   </div>
                 </div>
               </div>
-
             </div>
           </div>
         </section>
 
-        {/* IMPROVED: WHY CHOOSE US */}
+        {/* WHY CHOOSE US */}
         <section className="border-y border-gray-100 bg-white py-24">
           <div className="container mx-auto px-4 md:px-8">
             <div className="mb-20 text-center">
@@ -245,12 +249,13 @@ export default function HomePage() {
               </p>
             </div>
             <div className="grid grid-cols-1 gap-16 md:grid-cols-3">
-              
               <div className="flex flex-col items-center text-center">
                 <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full border border-gray-200">
                   <Heart className="h-6 w-6 text-gray-900" strokeWidth={1} />
                 </div>
-                <h3 className="mb-3 font-serif text-xl text-gray-900">Fresh Blooms</h3>
+                <h3 className="mb-3 font-serif text-xl text-gray-900">
+                  Fresh Blooms
+                </h3>
                 <p className="max-w-xs font-sans text-sm leading-relaxed text-gray-500">
                   We source only the freshest flowers daily from local growers to ensure longevity and beauty.
                 </p>
@@ -260,7 +265,9 @@ export default function HomePage() {
                 <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full border border-gray-200">
                   <Truck className="h-6 w-6 text-gray-900" strokeWidth={1} />
                 </div>
-                <h3 className="mb-3 font-serif text-xl text-gray-900">Fast Delivery</h3>
+                <h3 className="mb-3 font-serif text-xl text-gray-900">
+                  Fast Delivery
+                </h3>
                 <p className="max-w-xs font-sans text-sm leading-relaxed text-gray-500">
                   Same-day delivery available for orders placed before 2 PM. We deliver with care.
                 </p>
@@ -270,21 +277,20 @@ export default function HomePage() {
                 <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full border border-gray-200">
                   <Sparkles className="h-6 w-6 text-gray-900" strokeWidth={1} />
                 </div>
-                <h3 className="mb-3 font-serif text-xl text-gray-900">Custom Arrangements</h3>
+                <h3 className="mb-3 font-serif text-xl text-gray-900">
+                  Custom Arrangements
+                </h3>
                 <p className="max-w-xs font-sans text-sm leading-relaxed text-gray-500">
                   Tell us your occasion and we&apos;ll craft the perfect bouquet tailored just for you.
                 </p>
               </div>
-
             </div>
           </div>
         </section>
 
-        {/* IMPROVED: TESTIMONIALS (Customer's Reviews) */}
+        {/* TESTIMONIALS */}
         <section className="bg-[#FDFBF7] py-24">
           <div className="container mx-auto px-4">
-            
-            {/* Cleaner Stats Header */}
             <div className="mb-20 flex flex-col items-center justify-center gap-10 md:flex-row md:gap-24">
               <div className="text-center">
                 <p className="font-serif text-5xl text-gray-900">15k+</p>
@@ -292,7 +298,7 @@ export default function HomePage() {
                   Happy Customers
                 </p>
               </div>
-              
+
               <div className="hidden h-16 w-px bg-gray-200 md:block"></div>
 
               <div className="text-center">
@@ -303,7 +309,6 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Testimonials Grid */}
             {testimonialsLoading ? (
               <div className="py-20 text-center">
                 <Loader2 className="mx-auto h-8 w-8 animate-spin text-pink-600" />
@@ -311,21 +316,28 @@ export default function HomePage() {
             ) : testimonials.length === 0 ? (
               <div className="rounded-2xl border-2 border-dashed border-gray-200 py-20 text-center">
                 <Quote className="mx-auto mb-3 h-12 w-12 text-gray-300" />
-                <p className="text-gray-500">No reviews yet. Be the first to share your experience!</p>
+                <p className="text-gray-500">
+                  No reviews yet. Be the first to share your experience!
+                </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {testimonials.map((t, i) => (
-                  <div key={t.id} className="group relative rounded-2xl border border-gray-100 bg-white p-8 shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl">
+                  <div
+                    key={t.id}
+                    className="group relative rounded-2xl border border-gray-100 bg-white p-8 shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl"
+                  >
                     <Quote className="absolute right-6 top-6 h-8 w-8 text-pink-100" />
-                    <div className="mb-4 flex gap-1">
-                      {renderStars(t.rating)}
-                    </div>
+                    <div className="mb-4 flex gap-1">{renderStars(t.rating)}</div>
                     <p className="mb-8 text-sm leading-relaxed text-gray-700">
                       &ldquo;{t.text}&rdquo;
                     </p>
                     <div className="flex items-center gap-4 border-t border-gray-100 pt-6">
-                      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${getAvatarColor(i)}`}>
+                      <div
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${getAvatarColor(
+                          i
+                        )}`}
+                      >
                         {t.avatar}
                       </div>
                       <div>
@@ -373,7 +385,9 @@ export default function HomePage() {
             </p>
           </div>
           <div>
-            <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-gray-900">Contact</h3>
+            <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-gray-900">
+              Contact
+            </h3>
             <ul className="space-y-3 text-sm text-gray-500">
               <li className="flex items-center gap-3">
                 <Mail className="h-4 w-4 text-pink-600" />
@@ -390,7 +404,9 @@ export default function HomePage() {
             </ul>
           </div>
           <div>
-            <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-gray-900">Follow Us</h3>
+            <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-gray-900">
+              Follow Us
+            </h3>
             <p className="text-sm leading-relaxed text-gray-500">
               Stay in bloom — follow along for seasonal specials and inspiration.
             </p>
