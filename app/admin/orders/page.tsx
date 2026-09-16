@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   collection,
   getDocs,
@@ -37,6 +38,8 @@ import {
   Image as ImageIcon,
   ExternalLink,
   Hash,
+  Ban,
+  MessageSquareWarning,
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/lib/toast-context';
@@ -47,6 +50,8 @@ type PaymentStatus =
   | 'Awaiting Verification'
   | 'Verified'
   | 'Rejected';
+type CancelStatus = 'Pending' | 'Approved' | 'Rejected';
+type FilterKey = 'All' | OrderStatus | 'Cancel Requests';
 
 interface OrderItem {
   flowerId: string;
@@ -73,6 +78,13 @@ interface OrderData {
   total: number;
   status: OrderStatus;
   createdAt: string;
+  cancelStatus?: CancelStatus | null;
+  cancelReason?: string | null;
+  cancelNote?: string | null;
+  cancelRequestedAt?: string | null;
+  cancelReviewedAt?: string | null;
+  cancelRequestedBy?: string | null;
+  cancelReviewedBy?: string | null;
 }
 
 const statusConfig: Record<
@@ -151,14 +163,18 @@ const paymentStatusConfig: Record<
 
 export default function AdminOrdersPage() {
   const { showToast } = useToast();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'All' | OrderStatus>('All');
+  const [filter, setFilter] = useState<FilterKey>('All');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<OrderData | null>(null);
   const [printingOrder, setPrintingOrder] = useState<OrderData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [viewingReceipt, setViewingReceipt] = useState<string | null>(null);
+  const [reviewingCancel, setReviewingCancel] = useState<string | null>(null);
+  const autoOpenedRef = useRef(false);
 
   const fetchOrders = async () => {
     try {
@@ -172,7 +188,6 @@ export default function AdminOrdersPage() {
         ...doc.data(),
       })) as OrderData[];
       setOrders(data);
-      // keep modal in sync
       if (selected) {
         const updated = data.find((o) => o.id === selected.id);
         if (updated) setSelected(updated);
@@ -189,6 +204,18 @@ export default function AdminOrdersPage() {
     fetchOrders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 🔔 Auto-open order detail modal if ?order=<id> is in URL
+  useEffect(() => {
+    const orderId = searchParams.get('order');
+    if (!orderId || autoOpenedRef.current || orders.length === 0) return;
+
+    const targetOrder = orders.find((o) => o.id === orderId);
+    if (targetOrder) {
+      setSelected(targetOrder);
+      autoOpenedRef.current = true;
+    }
+  }, [searchParams, orders]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -226,11 +253,9 @@ export default function AdminOrdersPage() {
   ) => {
     try {
       const payload: any = { paymentStatus };
-      // When verifying, auto-move order to Processing
       if (paymentStatus === 'Verified' && autoConfirm) {
         payload.status = 'Processing';
       }
-      // When rejecting, auto-cancel order
       if (paymentStatus === 'Rejected' && autoConfirm) {
         payload.status = 'Cancelled';
       }
@@ -272,6 +297,68 @@ export default function AdminOrdersPage() {
     }
   };
 
+  const handleCancelReview = async (
+    id: string,
+    decision: 'Approved' | 'Rejected'
+  ) => {
+    setReviewingCancel(id);
+    try {
+      const payload: any = {
+        cancelStatus: decision,
+        cancelReviewedAt: new Date().toISOString(),
+        cancelReviewedBy: 'admin',
+      };
+
+      if (decision === 'Approved') {
+        payload.status = 'Cancelled';
+      }
+
+      await updateDoc(doc(db, 'orders', id), payload);
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === id
+            ? {
+                ...o,
+                cancelStatus: decision,
+                cancelReviewedAt: payload.cancelReviewedAt,
+                ...(payload.status ? { status: payload.status } : {}),
+              }
+            : o
+        )
+      );
+      if (selected?.id === id) {
+        setSelected({
+          ...selected,
+          cancelStatus: decision,
+          cancelReviewedAt: payload.cancelReviewedAt,
+          ...(payload.status ? { status: payload.status } : {}),
+        });
+      }
+
+      showToast({
+        message:
+          decision === 'Approved'
+            ? '✅ Cancellation approved'
+            : '❌ Cancellation rejected',
+        description:
+          decision === 'Approved'
+            ? 'Order has been cancelled and customer will be notified.'
+            : 'Order stays active. Customer can still receive it.',
+        type: decision === 'Approved' ? 'success' : 'error',
+      });
+    } catch (err: any) {
+      console.error('Cancel review failed:', err);
+      showToast({
+        message: 'Failed to review cancellation.',
+        description: err.message,
+        type: 'error',
+      });
+    } finally {
+      setReviewingCancel(null);
+    }
+  };
+
   const handlePrintReceipt = (order: OrderData) => {
     setPrintingOrder(order);
     setTimeout(() => {
@@ -279,10 +366,20 @@ export default function AdminOrdersPage() {
     }, 150);
   };
 
+  const handleCloseModal = () => {
+    setSelected(null);
+    if (searchParams.get('order')) {
+      autoOpenedRef.current = false;
+      router.replace('/admin/orders');
+    }
+  };
+
   const filtered = useMemo(() => {
     let result = orders;
 
-    if (filter !== 'All') {
+    if (filter === 'Cancel Requests') {
+      result = result.filter((o) => o.cancelStatus === 'Pending');
+    } else if (filter !== 'All') {
       result = result.filter((o) => o.status === filter);
     }
 
@@ -308,6 +405,9 @@ export default function AdminOrdersPage() {
     const awaitingPayment = orders.filter(
       (o) => o.paymentStatus === 'Awaiting Verification'
     ).length;
+    const cancelRequests = orders.filter(
+      (o) => o.cancelStatus === 'Pending'
+    ).length;
     const revenue = orders
       .filter((o) => o.status !== 'Cancelled')
       .reduce((sum, o) => sum + (o.total || 0), 0);
@@ -320,6 +420,7 @@ export default function AdminOrdersPage() {
       cancelled,
       revenue,
       awaitingPayment,
+      cancelRequests,
     };
   }, [orders]);
 
@@ -354,12 +455,13 @@ export default function AdminOrdersPage() {
     },
   ];
 
-  const filterTabs: Array<{ key: 'All' | OrderStatus; count: number }> = [
+  const filterTabs: Array<{ key: FilterKey; count: number }> = [
     { key: 'All', count: stats.total },
     { key: 'Pending', count: stats.pending },
     { key: 'Processing', count: stats.processing },
     { key: 'Completed', count: stats.completed },
     { key: 'Cancelled', count: stats.cancelled },
+    { key: 'Cancel Requests', count: stats.cancelRequests },
   ];
 
   const formatDate = (dateStr: string) => {
@@ -411,6 +513,9 @@ export default function AdminOrdersPage() {
   const isOnlinePayment = (order: OrderData) =>
     order.paymentMethod === 'online';
 
+  const hasPendingCancel = (order: OrderData) =>
+    order.cancelStatus === 'Pending';
+
   return (
     <>
       {/* SCREEN VIEW */}
@@ -451,11 +556,11 @@ export default function AdminOrdersPage() {
                 className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white transition-all hover:-translate-y-0.5 hover:shadow-lg"
               >
                 <div
-                  className={`absolute inset-0 bg-gradient-to-br ${stat.bgGradient} opacity-0 transition-opacity group-hover:opacity-100`}
+                  className={`absolute inset-0 bg-linear-to-br ${stat.bgGradient} opacity-0 transition-opacity group-hover:opacity-100`}
                 />
                 <div className="relative p-5">
                   <div
-                    className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${stat.gradient} shadow-sm`}
+                    className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br ${stat.gradient} shadow-sm`}
                   >
                     <Icon className="h-5 w-5 text-white" />
                   </div>
@@ -470,48 +575,6 @@ export default function AdminOrdersPage() {
             );
           })}
         </div>
-
-        {/* Awaiting Payment Alert */}
-        {stats.awaitingPayment > 0 && (
-          <div className="mb-6 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white text-blue-600 shadow-sm">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-blue-700">
-                {stats.awaitingPayment} online payment
-                {stats.awaitingPayment > 1 ? 's' : ''} awaiting verification
-              </p>
-              <p className="text-xs text-blue-600">
-                Review the uploaded receipts and verify or reject each payment.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Pending Alert */}
-        {stats.pending > 0 && (
-          <div className="mb-6 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white text-amber-600 shadow-sm">
-              <Clock className="h-5 w-5" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-amber-700">
-                {stats.pending} order{stats.pending > 1 ? 's' : ''} waiting for
-                confirmation
-              </p>
-              <p className="text-xs text-amber-600">
-                Update the status to notify customers.
-              </p>
-            </div>
-            <button
-              onClick={() => setFilter('Pending')}
-              className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-amber-700"
-            >
-              View Pending
-            </button>
-          </div>
-        )}
 
         {/* Search & Filter */}
         <div className="mb-4 flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:flex-row sm:items-center">
@@ -529,14 +592,19 @@ export default function AdminOrdersPage() {
           <div className="flex flex-wrap gap-2">
             {filterTabs.map((tab) => {
               const isActive = filter === tab.key;
+              const isCancelTab = tab.key === 'Cancel Requests';
               return (
                 <button
                   key={tab.key}
                   onClick={() => setFilter(tab.key)}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
                     isActive
-                      ? 'bg-pink-600 text-white shadow-sm'
-                      : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                      ? isCancelTab
+                        ? 'bg-rose-600 text-white shadow-sm'
+                        : 'bg-pink-600 text-white shadow-sm'
+                      : isCancelTab && tab.count > 0
+                        ? 'border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                        : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
                   }`}
                 >
                   {tab.key}
@@ -544,7 +612,9 @@ export default function AdminOrdersPage() {
                     className={`rounded-full px-1.5 text-[10px] ${
                       isActive
                         ? 'bg-white/20 text-white'
-                        : 'bg-gray-100 text-gray-600'
+                        : isCancelTab && tab.count > 0
+                          ? 'bg-rose-100 text-rose-700'
+                          : 'bg-gray-100 text-gray-600'
                     }`}
                   >
                     {tab.count}
@@ -625,13 +695,14 @@ export default function AdminOrdersPage() {
                     const PayIcon = payConfig.icon;
                     const needsVerification =
                       payStatus === 'Awaiting Verification';
+                    const cancelPending = hasPendingCancel(order);
 
                     return (
                       <tr
                         key={order.id}
                         className={`group transition-colors hover:bg-pink-50/30 ${
                           needsVerification ? 'bg-blue-50/40' : ''
-                        }`}
+                        } ${cancelPending ? 'bg-rose-50/40' : ''}`}
                       >
                         <td className="px-6 py-4">
                           <span className="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs font-medium text-gray-700">
@@ -641,7 +712,7 @@ export default function AdminOrdersPage() {
 
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-100 to-rose-100 text-xs font-bold text-pink-600">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-pink-100 to-rose-100 text-xs font-bold text-pink-600">
                               {order.customerName
                                 ?.split(' ')
                                 .map((n) => n[0])
@@ -672,7 +743,6 @@ export default function AdminOrdersPage() {
                           </span>
                         </td>
 
-                        {/* Payment */}
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
                             <span className="text-xs text-gray-600">
@@ -693,23 +763,37 @@ export default function AdminOrdersPage() {
                           </div>
                         </td>
 
-                        {/* Status */}
                         <td className="px-6 py-4">
-                          <select
-                            value={order.status}
-                            onChange={(e) =>
-                              updateStatus(
-                                order.id,
-                                e.target.value as OrderStatus
-                              )
-                            }
-                            className={`cursor-pointer rounded-full border-0 px-3 py-1.5 text-xs font-medium outline-none transition-all ${config.bg} ${config.color}`}
-                          >
-                            <option value="Pending">Pending</option>
-                            <option value="Processing">Processing</option>
-                            <option value="Completed">Completed</option>
-                            <option value="Cancelled">Cancelled</option>
-                          </select>
+                          <div className="flex flex-col gap-1.5">
+                            <select
+                              value={order.status}
+                              onChange={(e) =>
+                                updateStatus(
+                                  order.id,
+                                  e.target.value as OrderStatus
+                                )
+                              }
+                              className={`cursor-pointer rounded-full border-0 px-3 py-1.5 text-xs font-medium outline-none transition-all ${config.bg} ${config.color}`}
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="Processing">Processing</option>
+                              <option value="Completed">Completed</option>
+                              <option value="Cancelled">Cancelled</option>
+                            </select>
+
+                            {cancelPending && (
+                              <span className="inline-flex w-fit items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-700">
+                                <MessageSquareWarning className="h-3 w-3" />
+                                CANCEL REQUESTED
+                              </span>
+                            )}
+
+                            {order.cancelStatus === 'Rejected' && (
+                              <span className="inline-flex w-fit items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                                Cancel rejected
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         <td className="px-6 py-4 text-xs text-gray-500">
@@ -720,7 +804,16 @@ export default function AdminOrdersPage() {
 
                         <td className="px-6 py-4">
                           <div className="flex justify-end gap-1">
-                            {needsVerification && (
+                            {cancelPending && (
+                              <button
+                                onClick={() => setSelected(order)}
+                                className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-rose-700"
+                                title="Review Cancellation"
+                              >
+                                Review
+                              </button>
+                            )}
+                            {needsVerification && !cancelPending && (
                               <button
                                 onClick={() => setSelected(order)}
                                 className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
@@ -773,7 +866,7 @@ export default function AdminOrdersPage() {
                 </p>
               </div>
               <button
-                onClick={() => setSelected(null)}
+                onClick={handleCloseModal}
                 className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
               >
                 <X className="h-5 w-5" />
@@ -781,6 +874,130 @@ export default function AdminOrdersPage() {
             </div>
 
             <div className="space-y-5 p-5">
+              {/* CANCELLATION REQUEST SECTION */}
+              {selected.cancelStatus === 'Pending' && (
+                <div className="rounded-xl border-2 border-rose-300 bg-rose-50 p-4">
+                  <div className="mb-3 flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-rose-600 shadow-sm">
+                      <MessageSquareWarning className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        Cancellation Request
+                      </p>
+                      <p className="text-sm font-bold text-rose-700">
+                        Customer wants to cancel this order
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mb-3 rounded-lg border border-rose-200 bg-white p-3">
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Reason
+                    </p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {selected.cancelReason || 'No reason provided'}
+                    </p>
+                    {selected.cancelNote && (
+                      <>
+                        <p className="mt-2 mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          Additional Note
+                        </p>
+                        <p className="text-sm text-gray-700">
+                          {selected.cancelNote}
+                        </p>
+                      </>
+                    )}
+                    {selected.cancelRequestedAt && (
+                      <p className="mt-3 flex items-center gap-1 text-xs text-gray-400">
+                        <Clock className="h-3 w-3" />
+                        Requested {formatRelative(selected.cancelRequestedAt)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button
+                      onClick={() =>
+                        handleCancelReview(selected.id, 'Approved')
+                      }
+                      disabled={reviewingCancel === selected.id}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {reviewingCancel === selected.id ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="h-4 w-4" />
+                          Approve Cancellation
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleCancelReview(selected.id, 'Rejected')
+                      }
+                      disabled={reviewingCancel === selected.id}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Ban className="h-4 w-4" />
+                      Reject — Keep Order
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Approved cancel result */}
+              {selected.cancelStatus === 'Approved' && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-rose-600 shadow-sm">
+                      <XCircle className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        Cancellation Approved
+                      </p>
+                      <p className="text-sm font-bold text-rose-700">
+                        Order has been cancelled
+                      </p>
+                      {selected.cancelReason && (
+                        <p className="mt-1 text-xs text-gray-600">
+                          Reason: {selected.cancelReason}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Rejected cancel result */}
+              {selected.cancelStatus === 'Rejected' && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-gray-500 shadow-sm">
+                      <Ban className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                        Cancellation Rejected
+                      </p>
+                      <p className="text-sm font-bold text-gray-700">
+                        Order continues as normal
+                      </p>
+                      {selected.cancelReason && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          Customer&apos;s reason: {selected.cancelReason}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Payment Verification Banner */}
               {isOnlinePayment(selected) && (
                 <div
@@ -793,7 +1010,7 @@ export default function AdminOrdersPage() {
                       const Icon = paymentStatusConfig[ps].icon;
                       return (
                         <div
-                          className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white ${paymentStatusConfig[ps].color} shadow-sm`}
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white ${paymentStatusConfig[ps].color} shadow-sm`}
                         >
                           <Icon className="h-5 w-5" />
                         </div>
@@ -812,7 +1029,6 @@ export default function AdminOrdersPage() {
                     </div>
                   </div>
 
-                  {/* Reference */}
                   {selected.paymentReference && (
                     <div className="mb-3 flex items-center gap-2 rounded-lg bg-white/70 px-3 py-2">
                       <Hash className="h-3.5 w-3.5 text-gray-500" />
@@ -825,7 +1041,6 @@ export default function AdminOrdersPage() {
                     </div>
                   )}
 
-                  {/* Receipt preview */}
                   {selected.paymentReceiptUrl ? (
                     <div className="mb-3">
                       <button
@@ -855,7 +1070,6 @@ export default function AdminOrdersPage() {
                     </div>
                   )}
 
-                  {/* Verify / Reject buttons */}
                   {selected.paymentStatus === 'Awaiting Verification' && (
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <button
@@ -903,7 +1117,7 @@ export default function AdminOrdersPage() {
                   const Icon = statusConfig[selected.status].icon;
                   return (
                     <div
-                      className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white ${statusConfig[selected.status].color} shadow-sm`}
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white ${statusConfig[selected.status].color} shadow-sm`}
                     >
                       <Icon className="h-5 w-5" />
                     </div>
@@ -940,7 +1154,7 @@ export default function AdminOrdersPage() {
                 </h3>
                 <div className="space-y-3 rounded-xl bg-gray-50 p-4">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-white text-pink-600 shadow-sm">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-pink-600 shadow-sm">
                       <User className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -951,7 +1165,7 @@ export default function AdminOrdersPage() {
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-white text-pink-600 shadow-sm">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-pink-600 shadow-sm">
                       <Phone className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -962,7 +1176,7 @@ export default function AdminOrdersPage() {
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-white text-pink-600 shadow-sm">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-pink-600 shadow-sm">
                       <MapPin className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -986,7 +1200,7 @@ export default function AdminOrdersPage() {
                       key={i}
                       className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3 transition-shadow hover:shadow-sm"
                     >
-                      <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100">
                         {item.imageUrl && (
                           <img
                             src={item.imageUrl}
@@ -1029,7 +1243,7 @@ export default function AdminOrdersPage() {
                   Payment Method
                 </h3>
                 <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-4">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
                     <CreditCard className="h-5 w-5" />
                   </div>
                   <div>
@@ -1077,7 +1291,7 @@ export default function AdminOrdersPage() {
               {/* Actions */}
               <div className="flex gap-3 border-t border-gray-100 pt-5">
                 <button
-                  onClick={() => setSelected(null)}
+                  onClick={handleCloseModal}
                   className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
                 >
                   Close
@@ -1098,7 +1312,7 @@ export default function AdminOrdersPage() {
       {/* RECEIPT LIGHTBOX */}
       {viewingReceipt && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 print:hidden"
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-4 print:hidden"
           onClick={() => setViewingReceipt(null)}
         >
           <div
@@ -1129,7 +1343,7 @@ export default function AdminOrdersPage() {
         </div>
       )}
 
-      {/* PRINT RECEIPT — keep as is */}
+      {/* PRINT RECEIPT */}
       {printingOrder && (
         <div className="hidden print:block">
           <div className="mx-auto max-w-2xl p-8 text-black">
