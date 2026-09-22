@@ -10,6 +10,8 @@ import {
   getDocs,
   doc,
   updateDoc,
+  onSnapshot,
+  or,
 } from 'firebase/firestore';
 import {
   Loader2,
@@ -19,17 +21,9 @@ import {
   XCircle,
   ShoppingBag,
   Ban,
-  MessageSquareWarning,
   Eye,
   X,
   User,
-  Phone,
-  MapPin,
-  FileText,
-  CreditCard,
-  Calendar,
-  ShieldCheck,
-  ShieldX,
   Image as ImageIcon,
   ExternalLink,
   Package,
@@ -39,6 +33,8 @@ import {
   Copy,
   Check,
   Mail,
+  ShieldCheck,
+  ShieldX,
 } from 'lucide-react';
 import { Navbar } from '@/components/Navbar';
 import { db } from '@/lib/firebase';
@@ -82,6 +78,25 @@ interface OrderData {
   cancelNote?: string | null;
   cancelRequestedAt?: string | null;
   cancelReviewedAt?: string | null;
+}
+
+interface Reply {
+  id: string;
+  message: string;
+  from: 'admin' | 'customer';
+  fromName: string;
+  createdAt: string;
+}
+
+interface MessageData {
+  id: string;
+  name: string;
+  email: string;
+  message: string;
+  userId: string | null;
+  status: 'read' | 'unread';
+  createdAt: string;
+  replies?: Reply[];
 }
 
 const statusConfig: Record<
@@ -134,6 +149,10 @@ export default function AccountPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('orders');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
+  // Messages state
+  const [messages, setMessages] = useState<MessageData[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(true);
+
   // Redirect if not logged in
   useEffect(() => {
     if (!authLoading && !user) {
@@ -168,6 +187,43 @@ export default function AccountPage() {
     };
     fetchOrders();
   }, [user, showToast]);
+
+  // Fetch messages — real-time listener
+  useEffect(() => {
+    if (!user || !user.email) return;
+
+    setMessagesLoading(true);
+
+    // Query by userId OR email (para mahuli rin ang guest messages)
+    const q = query(
+      collection(db, 'messages'),
+      or(
+        where('userId', '==', user.uid),
+        where('email', '==', user.email)
+      )
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const data = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .sort(
+            (a: any, b: any) =>
+              new Date(b.createdAt).getTime() -
+              new Date(a.createdAt).getTime()
+          ) as MessageData[];
+        setMessages(data);
+        setMessagesLoading(false);
+      },
+      (err) => {
+        console.error('Messages listener error:', err);
+        setMessagesLoading(false);
+      }
+    );
+
+    return () => unsub();
+  }, [user]);
 
   const canCancel = (order: OrderData) => {
     return (
@@ -239,11 +295,15 @@ export default function AccountPage() {
     try {
       const date = new Date(dateStr);
       const now = new Date();
-      const diffHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+      const diffMs = now.getTime() - date.getTime();
+      const diffMin = diffMs / (1000 * 60);
+      const diffHours = diffMin / 60;
+      const diffDays = diffHours / 24;
 
-      if (diffHours < 1) return 'Just now';
+      if (diffMin < 1) return 'Just now';
+      if (diffMin < 60) return `${Math.floor(diffMin)}m ago`;
       if (diffHours < 24) return `${Math.floor(diffHours)}h ago`;
-      if (diffHours < 48) return 'Yesterday';
+      if (diffDays < 2) return 'Yesterday';
       return date.toLocaleDateString('en-PH', {
         month: 'short',
         day: 'numeric',
@@ -372,7 +432,7 @@ export default function AccountPage() {
               <div className="h-12 w-px bg-stone-300" />
               <div className="text-center">
                 <p className="font-serif text-4xl leading-none text-stone-900">
-                  {stats.cancelPending}
+                  {messages.length}
                 </p>
                 <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.2em] text-stone-500">
                   Messages
@@ -484,7 +544,7 @@ export default function AccountPage() {
                     {
                       key: 'messages' as TabKey,
                       label: 'Messages',
-                      count: stats.cancelPending,
+                      count: messages.length,
                     },
                   ] as const
                 ).map((tab) => {
@@ -843,7 +903,14 @@ export default function AccountPage() {
               {/* MESSAGES TAB */}
               {activeTab === 'messages' && (
                 <div>
-                  {stats.cancelPending === 0 ? (
+                  {messagesLoading ? (
+                    <div className="border border-stone-200 bg-white p-20 text-center">
+                      <Loader2 className="mx-auto h-6 w-6 animate-spin text-stone-400" />
+                      <p className="mt-3 text-sm text-stone-500">
+                        Loading messages...
+                      </p>
+                    </div>
+                  ) : messages.length === 0 ? (
                     <div className="border border-stone-200 bg-white p-16 text-center">
                       <Mail
                         className="mx-auto mb-4 h-7 w-7 text-stone-400"
@@ -853,40 +920,126 @@ export default function AccountPage() {
                         No messages yet
                       </p>
                       <p className="mt-1 text-sm text-stone-500">
-                        Order updates and notifications will appear here.
+                        Your conversations with us will appear here.
                       </p>
+                      <Link
+                        href="/contact"
+                        className="mt-6 inline-flex items-center gap-2 border border-stone-900 bg-stone-900 px-6 py-3 text-[11px] font-medium uppercase tracking-[0.2em] text-white transition-colors hover:bg-stone-800"
+                      >
+                        Send a Message
+                      </Link>
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      {orders
-                        .filter((o) => o.cancelStatus === 'Pending')
-                        .map((order) => (
+                    <div className="space-y-6">
+                      {messages.map((msg) => {
+                        const hasReply = (msg.replies?.length || 0) > 0;
+
+                        return (
                           <div
-                            key={order.id}
-                            className="border border-rose-200 bg-white p-5"
+                            key={msg.id}
+                            className="border border-stone-200 bg-white"
                           >
-                            <div className="mb-2 flex items-center gap-2">
-                              <span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-500" />
-                              <p className="text-[11px] font-medium uppercase tracking-[0.15em] text-rose-700">
-                                Cancellation Pending
-                              </p>
+                            {/* Header */}
+                            <div className="flex items-center justify-between border-b border-stone-100 px-5 py-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-stone-400">
+                                  Your Inquiry
+                                </span>
+                                {hasReply && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Replied
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] font-medium uppercase tracking-[0.15em] text-stone-400">
+                                {formatRelative(msg.createdAt)}
+                              </span>
                             </div>
-                            <p className="font-serif text-lg text-stone-900">
-                              Order #{order.id.slice(0, 8).toUpperCase()}
-                            </p>
-                            <p className="mt-1 text-sm text-stone-500">
-                              Our team is reviewing your cancellation request.
-                            </p>
-                            {order.cancelReason && (
-                              <p className="mt-2 text-xs text-stone-500">
-                                <span className="font-medium text-stone-700">
-                                  Reason:
-                                </span>{' '}
-                                {order.cancelReason}
-                              </p>
+
+                            {/* Original message */}
+                            <div className="flex gap-3 border-b border-stone-100 px-5 py-5">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-stone-200 text-xs font-bold text-stone-600">
+                                {msg.name?.[0]?.toUpperCase() || 'U'}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="mb-1 flex items-center gap-2">
+                                  <p className="text-sm font-semibold text-stone-900">
+                                    {msg.name}
+                                  </p>
+                                  <span className="text-xs text-stone-400">
+                                    {formatDate(msg.createdAt)}
+                                  </span>
+                                </div>
+                                <div className="rounded-2xl rounded-tl-md bg-stone-50 p-4 text-sm leading-relaxed text-stone-700">
+                                  {msg.message}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Replies */}
+                            {hasReply && (
+                              <div className="space-y-4 px-5 py-5">
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-stone-400">
+                                  Conversation ({msg.replies!.length})
+                                </p>
+                                {msg.replies!.map((reply) => {
+                                  const isAdmin = reply.from === 'admin';
+                                  return (
+                                    <div
+                                      key={reply.id}
+                                      className={`flex gap-3 ${
+                                        isAdmin ? 'flex-row-reverse' : ''
+                                      }`}
+                                    >
+                                      <div
+                                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                                          isAdmin
+                                            ? 'bg-gradient-to-br from-pink-500 to-rose-600 text-white'
+                                            : 'bg-stone-200 text-stone-600'
+                                        }`}
+                                      >
+                                        {isAdmin ? (
+                                          <MessageCircle className="h-4 w-4" />
+                                        ) : (
+                                          <User className="h-4 w-4" />
+                                        )}
+                                      </div>
+                                      <div
+                                        className={`flex-1 min-w-0 ${
+                                          isAdmin ? 'text-right' : ''
+                                        }`}
+                                      >
+                                        <div
+                                          className={`mb-1 flex items-center gap-2 ${
+                                            isAdmin ? 'justify-end' : ''
+                                          }`}
+                                        >
+                                          <p className="text-sm font-semibold text-stone-900">
+                                            {reply.fromName}
+                                          </p>
+                                          <span className="text-xs text-stone-400">
+                                            {formatRelative(reply.createdAt)}
+                                          </span>
+                                        </div>
+                                        <div
+                                          className={`inline-block max-w-full rounded-2xl p-4 text-left text-sm leading-relaxed ${
+                                            isAdmin
+                                              ? 'rounded-tr-md bg-gradient-to-br from-pink-500 to-rose-600 text-white'
+                                              : 'rounded-tl-md bg-stone-50 text-stone-700'
+                                          }`}
+                                        >
+                                          {reply.message}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             )}
                           </div>
-                        ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
